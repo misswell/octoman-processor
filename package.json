@@ -1,0 +1,64 @@
+{
+  "name": "octoman-compressor",
+  "version": "1.0.0",
+  "description": "Octoman Compressor - 免费开源的图片压缩神器，PP鸭 复刻版",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "website": "npx serve website -p 3000",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.octoman.compressor",
+    "productName": "Octoman Compressor",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "compression/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities",
+      "icon": "assets/icon.png",
+      "identity": null
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "keywords": [
+    "image",
+    "compression",
+    "png",
+    "jpg",
+    "gif",
+    "webp",
+    "ppduck"
+  ],
+  "author": "Octoman Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.13.3",
+    "serve": "^14.2.0"
+  }
+}

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <rect width="800" height="500" fill="#f0f4ff" rx="12"/>
+  <rect x="40" y="40" width="720" height="420" rx="16" fill="white" stroke="#e0e0e0" stroke-width="1"/>
+  <!-- Title bar -->
+  <rect x="40" y="40" width="720" height="40" rx="16" fill="#f8f9fa"/>
+  <rect x="40" y="64" width="720" height="16" fill="#f8f9fa"/>
+  <circle cx="64" cy="60" r="6" fill="#ff5f57"/>
+  <circle cx="84" cy="60" r="6" fill="#ffbd2e"/>
+  <circle cx="104" cy="60" r="6" fill="#28c840"/>
+  <text x="400" y="65" text-anchor="middle" fill="#888" font-size="13" font-family="sans-serif">Octoman Compressor</text>
+  <!-- Drop zone -->
+  <rect x="80" y="100" width="640" height="200" rx="12" fill="none" stroke="#4A90D9" stroke-width="2.5" stroke-dasharray="8,6"/>
+  <text x="400" y="180" text-anchor="middle" fill="#4A90D9" font-size="40">+</text>
+  <text x="400" y="220" text-anchor="middle" fill="#333" font-size="20" font-family="sans-serif" font-weight="500">拖拽图片或文件夹到此处</text>
+  <text x="400" y="248" text-anchor="middle" fill="#999" font-size="14" font-family="sans-serif">支持 PNG、JPG、GIF、WebP、BMP 格式</text>
+  <!-- Buttons -->
+  <rect x="280" y="270" width="100" height="36" rx="8" fill="#4A90D9"/>
+  <text x="330" y="293" text-anchor="middle" fill="white" font-size="14" font-family="sans-serif">选择文件</text>
+  <rect x="400" y="270" width="100" height="36" rx="8" fill="none" stroke="#ddd" stroke-width="1"/>
+  <text x="450" y="293" text-anchor="middle" fill="#666" font-size="14" font-family="sans-serif">选择文件夹</text>
+  <!-- Footer info -->
+  <text x="400" y="440" text-anchor="middle" fill="#aaa" font-size="12" font-family="sans-serif">完全免费开源 · MIT License</text>
+</svg>

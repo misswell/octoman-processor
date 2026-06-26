@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Octoman Compressor - 免费开源的图片压缩神器</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐙</text></svg>">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; color:#333; background:#fff; -webkit-font-smoothing:antialiased; }
+    a { color:#4A90D9; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    .container { max-width:1100px; margin:0 auto; padding:0 24px; }
+    .btn { display:inline-flex; align-items:center; gap:8px; padding:12px 28px; border:none; border-radius:10px; font-size:15px; font-weight:500; cursor:pointer; font-family:inherit; transition:all .2s; }
+    .btn-primary { background:#4A90D9; color:#fff; }
+    .btn-primary:hover { background:#357ABD; transform:translateY(-1px); box-shadow:0 4px 16px rgba(74,144,217,.3); text-decoration:none; }
+    .btn-outline { background:transparent; color:#4A90D9; border:2px solid #4A90D9; }
+    .btn-outline:hover { background:#E8F0FE; transform:translateY(-1px); text-decoration:none; }
+    .btn-ghost { background:#f0f0f0; color:#555; }
+    .btn-ghost:hover { background:#e4e4e4; text-decoration:none; }
+    .btn-large { padding:14px 36px; font-size:16px; border-radius:12px; }
+    .section-title { text-align:center; font-size:30px; font-weight:700; margin-bottom:10px; }
+    .section-subtitle { text-align:center; font-size:15px; color:#999; margin-bottom:50px; max-width:500px; margin-left:auto; margin-right:auto; line-height:1.6; }
+
+    /* Header */
+    .header { border-bottom:1px solid #eaeaea; background:rgba(255,255,255,.95); backdrop-filter:blur(10px); position:sticky; top:0; z-index:100; }
+    .header-inner { display:flex; align-items:center; height:60px; }
+    .logo { font-size:20px; font-weight:700; color:#4A90D9; display:flex; align-items:center; gap:8px; }
+    .logo span { font-size:24px; }
+    .nav { margin-left:auto; display:flex; align-items:center; gap:24px; }
+    .nav a { color:#666; font-size:14px; font-weight:500; }
+    .nav a:hover { color:#4A90D9; }
+
+    /* Hero */
+    .hero { padding:80px 0 60px; text-align:center; background:linear-gradient(180deg,#f5f9ff 0%,#fff 100%); }
+    .hero h1 { font-size:44px; font-weight:800; color:#1a1a1a; margin-bottom:16px; letter-spacing:-1px; }
+    .hero h1 span { color:#4A90D9; }
+    .hero p { font-size:17px; color:#666; max-width:560px; margin:0 auto 32px; line-height:1.7; }
+    .hero-badges { display:flex; justify-content:center; gap:10px; margin-bottom:36px; flex-wrap:wrap; }
+    .badge { display:inline-flex; align-items:center; gap:4px; padding:5px 14px; border-radius:20px; font-size:13px; background:#E8F0FE; color:#4A90D9; font-weight:500; }
+    .hero-buttons { display:flex; justify-content:center; gap:14px; flex-wrap:wrap; }
+    .hero-image { margin-top:50px; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.1); max-width:100%; border:1px solid #eee; }
+
+    /* Features */
+    .features { padding:80px 0; background:#f8f9fa; }
+    .features-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+    .feature-card { background:#fff; border-radius:14px; padding:32px 28px; box-shadow:0 2px 12px rgba(0,0,0,.04); text-align:center; transition:all .2s; }
+    .feature-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.08); }
+    .feature-icon { font-size:36px; margin-bottom:14px; }
+    .feature-card h3 { font-size:16px; font-weight:600; margin-bottom:8px; }
+    .feature-card p { font-size:13px; color:#888; line-height:1.6; }
+
+    /* Algorithms */
+    .algorithms { padding:80px 0; }
+    .algo-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+    .algo-card { background:#f8f9fa; border-radius:12px; padding:24px 20px; text-align:center; transition:all .2s; }
+    .algo-card:hover { background:#E8F0FE; }
+    .algo-card h4 { font-size:15px; font-weight:600; margin-bottom:4px; }
+    .algo-card p { font-size:12px; color:#888; }
+    .algo-tag { display:inline-block; padding:2px 10px; border-radius:10px; font-size:11px; font-weight:600; margin-top:8px; }
+    .tag-png { background:#FCE4EC; color:#C2185B; }
+    .tag-jpg { background:#FFF3E0; color:#E65100; }
+    .tag-gif { background:#F3E5F5; color:#7B1FA2; }
+    .tag-webp { background:#E3F2FD; color:#1565C0; }
+
+    /* Comparison */
+    .comparison { padding:80px 0; background:#f8f9fa; }
+    .comparison-box { max-width:700px; margin:0 auto; background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,.06); }
+    .comparison-tabs { display:flex; border-bottom:1px solid #eee; }
+    .comparison-tab { flex:1; padding:12px; text-align:center; font-size:14px; font-weight:500; color:#888; cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; }
+    .comparison-tab.active { color:#4A90D9; border-bottom-color:#4A90D9; }
+    .comparison-table { padding:24px; }
+    .cmp-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #f5f5f5; font-size:14px; }
+    .cmp-row:last-child { border-bottom:none; }
+    .cmp-label { color:#888; }
+    .cmp-value { font-weight:600; }
+    .cmp-value.good { color:#34C759; }
+
+    /* Open Source */
+    .opensource { padding:80px 0; text-align:center; }
+    .opensource h2 { font-size:28px; font-weight:700; margin-bottom:14px; }
+    .opensource p { font-size:15px; color:#666; max-width:500px; margin:0 auto 30px; line-height:1.7; }
+
+    /* Footer */
+    .footer { border-top:1px solid #eaeaea; padding:30px 0; text-align:center; font-size:13px; color:#999; }
+    .footer a { color:#666; }
+
+    @media (max-width:768px) {
+      .hero h1 { font-size:28px; }
+      .features-grid { grid-template-columns:1fr; }
+      .algo-grid { grid-template-columns:repeat(2,1fr); }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <div class="logo"><span>🐙</span> Octoman</div>
+      <nav class="nav">
+        <a href="#features">特性</a>
+        <a href="#algorithms">算法</a>
+        <a href="#opensource">开源</a>
+        <a href="https://github.com/guofeng/octoman-compressor" target="_blank">GitHub</a>
+        <a href="https://github.com/guofeng/octoman-compressor/releases" class="btn btn-primary" target="_blank">📥 下载客户端</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badges">
+        <span class="badge">🔓 完全免费</span>
+        <span class="badge">📖 MIT 开源</span>
+        <span class="badge">🖥️ Mac / Windows</span>
+        <span class="badge">📦 批量处理</span>
+      </div>
+      <h1>像 <span>Octoman</span> 一样<br>轻松压缩图片</h1>
+      <p>整合业内最优秀的开源图片压缩算法，自动根据图片特征选择最佳压缩参数。拖拽图片即可批量压缩，省时省心。</p>
+      <div class="hero-buttons">
+        <a href="https://github.com/guofeng/octoman-compressor/releases" class="btn btn-primary btn-large">📥 下载客户端</a>
+        <a href="https://github.com/guofeng/octoman-compressor" class="btn btn-outline btn-large" target="_blank">🐙 GitHub 仓库</a>
+      </div>
+      <img src="screenshot.svg" alt="Octoman Compressor 截图" class="hero-image" style="max-width:800px">
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <div class="container">
+      <h2 class="section-title">核心特性</h2>
+      <p class="section-subtitle">PP鸭 同款压缩能力，完全免费开源</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🎯</div>
+          <h3>智能算法选择</h3>
+          <p>自动分析图片特征，从 pngquant、mozjpeg、gifsicle、cwebp 中选择最优算法和参数</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3>批量处理</h3>
+          <p>支持批量选择图片或整个文件夹拖入，自动递归处理子目录中所有图片</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔄</div>
+          <h3>多种格式</h3>
+          <p>支持 PNG、JPG、GIF、WebP、BMP 格式压缩，还可批量转换为 WebP</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>实时对比</h3>
+          <p>压缩前后体积、压缩率一目了然，支持单文件另存和批量导出</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔓</div>
+          <h3>完全免费</h3>
+          <p>MIT 开源协议，无需购买激活码，自由使用和修改</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🖥️</div>
+          <h3>桌面应用</h3>
+          <p>基于 Electron 构建，原生体验，支持 Mac 和 Windows</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="comparison" id="comparison">
+    <div class="container">
+      <h2 class="section-title">极致的图片压缩效果</h2>
+      <p class="section-subtitle">经过长时间反复调校和对比各种算法，在品质、体积、速度三者间帮你定位完美的平衡点</p>
+      <div class="comparison-box">
+        <div class="comparison-tabs">
+          <div class="comparison-tab active">PNG</div>
+          <div class="comparison-tab">JPG</div>
+          <div class="comparison-tab">GIF</div>
+        </div>
+        <div class="comparison-table">
+          <div class="cmp-row">
+            <span class="cmp-label">原始大小</span>
+            <span class="cmp-value">37.0 KB</span>
+          </div>
+          <div class="cmp-row">
+            <span class="cmp-label">压缩后大小</span>
+            <span class="cmp-value good">17.9 KB</span>
+          </div>
+          <div class="cmp-row">
+            <span class="cmp-label">体积缩小</span>
+            <span class="cmp-value good">51%</span>
+          </div>
+          <div class="cmp-row">
+            <span class="cmp-label">使用算法</span>
+            <span class="cmp-value">pngquant</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="algorithms" id="algorithms">
+    <div class="container">
+      <h2 class="section-title">压缩算法</h2>
+      <p class="section-subtitle">整合业内最优秀的开源图片压缩引擎</p>
+      <div class="algo-grid">
+        <div class="algo-card">
+          <h4>pngquant</h4>
+          <p>PNG 有损压缩，显著减小文件体积</p>
+          <span class="algo-tag tag-png">PNG</span>
+        </div>
+        <div class="algo-card">
+          <h4>mozjpeg</h4>
+          <p>Mozilla 优化的 JPEG 压缩编码器</p>
+          <span class="algo-tag tag-jpg">JPEG</span>
+        </div>
+        <div class="algo-card">
+          <h4>gifsicle</h4>
+          <p>GIF 动画/静态图优化压缩工具</p>
+          <span class="algo-tag tag-gif">GIF</span>
+        </div>
+        <div class="algo-card">
+          <h4>cwebp</h4>
+          <p>Google WebP 格式编码器</p>
+          <span class="algo-tag tag-webp">WebP</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="opensource" id="opensource">
+    <div class="container">
+      <h2>开源 · 免费 · 透明</h2>
+      <p>Octoman Compressor 是 PP鸭 的完全免费开源复刻版。所有代码托管在 GitHub，欢迎 Star、Fork、贡献代码。</p>
+      <a href="https://github.com/guofeng/octoman-compressor" class="btn btn-primary btn-large" target="_blank">🐙 前往 GitHub</a>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <p>Octoman Compressor 是 <a href="https://ppduck.com" target="_blank">PP鸭</a> 的免费开源复刻版 · 基于 MIT 协议开源</p>
+    </div>
+  </footer>
+</body>
+</html>
