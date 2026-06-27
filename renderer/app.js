@@ -266,6 +266,9 @@ function showResults() {
         <button class="btn-icon" onclick="openCompare(results.find(rr => rr.file === '${r.file.replace(/'/g, "\\'")}'))" title="对比查看">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 2h4v4H2V2zm0 6h4v4H2V8zm6-6h4v4H8V2zm0 6h4v4H8V8z"/></svg>
         </button>
+        <button class="btn-icon" onclick="restoreOriginal('${r.file.replace(/'/g, "\\'")}', '${r._backupPath || ""}', '${r._outputMode || "suffix"}')" title="恢复原图">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1a6 6 0 100 12A6 6 0 007 1zm0 10V7H4l3-4 3 4H7v4z"/></svg>
+        </button>
         <button class="btn-icon" onclick="openInFinder('${r.file.replace(/'/g, "\\'")}')" title="在访达中显示">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 012.5 1h3.172a1.5 1.5 0 011.06.44l.94.94H11.5A1.5 1.5 0 0113 3.88V11.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 011 11.5V2.5z"/></svg>
         </button>
@@ -291,6 +294,18 @@ async function saveResult(filePath) {
 function openInFinder(filePath) {
   ipcRenderer.invoke('open-in-finder', filePath);
 }
+
+async function restoreOriginal(filePath, backupPath, outputMode) {
+  const result = await ipcRenderer.invoke('restore-original', filePath, backupPath, outputMode);
+  if (result.success) {
+    showToast('已恢复原图: ' + path.basename(filePath));
+    results = results.filter(r => r.file !== filePath);
+    showResults();
+  } else {
+    showToast('恢复失败: ' + (result.error || '未知错误'));
+  }
+}
+
 
 async function exportAll() {
   let count = 0;
@@ -329,6 +344,51 @@ function formatBytes(bytes) {
 
 
 // ─── Comparison ─────────────────────────────────────────────────
+// ─── Recompress with new quality ────────────────────────────────
+async function recompressWithQuality(quality) {
+  if (!currentCompareResult) return;
+  const result = currentCompareResult;
+  const recompressBtn = document.getElementById("recompressBtn");
+  if (recompressBtn) recompressBtn.disabled = true;
+
+  try {
+    const options = {
+      quality: parseInt(quality),
+      backend: "auto",
+      effort: 6,
+    };
+    const newResult = await ipcRenderer.invoke("compress-single", result.file, options);
+    if (newResult && newResult.success && newResult.buffer) {
+      // Update the compressed image in the comparison
+      if (compareCompressedImg.src) {
+        URL.revokeObjectURL(compareCompressedImg.src);
+      }
+      const compressedBlob = new Blob([newResult.buffer], { type: "image/" + (newResult.type || "png") });
+      compareCompressedImg.src = URL.createObjectURL(compressedBlob);
+
+      // Update info
+      compareCompressedSize.textContent = newResult.compressedSizeFormatted || "?";
+      compareSavings.textContent = (newResult.savings >= 0 ? "-" : "+") + Math.abs(newResult.savings).toFixed(1) + "%";
+      compareAlgorithm.textContent = newResult.algorithm || "?";
+
+      // Update the result in results array
+      const idx = results.findIndex(r => r.file === result.file);
+      if (idx >= 0) {
+        results[idx] = { ...results[idx], ...newResult };
+      }
+      currentCompareResult = { ...result, ...newResult };
+
+      showToast("重新压缩完成 (质量: " + quality + "%)");
+    } else {
+      showToast("重新压缩失败");
+    }
+  } catch (err) {
+    showToast("重新压缩出错: " + err.message);
+  } finally {
+    if (recompressBtn) recompressBtn.disabled = false;
+  }
+}
+
 async function openCompare(result) {
   currentCompareResult = result;
 
@@ -378,6 +438,16 @@ function closeCompare() {
 }
 
 // Compare range slider
+
+// Recompress quality slider
+const recompressQualitySlider = document.getElementById('recompressQuality');
+const recompressQualityValue = document.getElementById('recompressQualityValue');
+if (recompressQualitySlider) {
+  recompressQualitySlider.addEventListener('input', () => {
+    recompressQualityValue.textContent = recompressQualitySlider.value + '%';
+  });
+}
+
 compareRange.addEventListener('input', () => {
   updateCompareSlider(compareRange.value);
 });

@@ -1,6 +1,6 @@
 {
   "name": "octor-compressor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Octor Compressor - 免费开源的图片压缩神器支持 PNG/JPEG/WebP/AVIF/JPEG XL 格式，集成 Squoosh/Sharp/pngquant/mozjpeg/gifsicle/oxipng 多引擎",
   "main": "main.js",
   "scripts": {

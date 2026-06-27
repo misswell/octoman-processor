@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { compressImage, compressSmart, compressToFormat, compressWithSharp, detectImageType, formatBytes } = require('./compression/engine');
 
 let mainWindow;
@@ -78,6 +79,10 @@ function collectImageFiles(filePaths) {
   return allFiles;
 }
 
+function getBackupDir() {
+  return path.join(os.tmpdir(), 'octor-compressor-backups');
+}
+
 function writeOutputFile(result, filePath, filePaths, options) {
   if (!result.success || !result.buffer) return null;
 
@@ -86,7 +91,15 @@ function writeOutputFile(result, filePath, filePaths, options) {
   const outExt = result.type ? '.' + result.type : path.extname(filePath);
 
   if (outputMode === 'replace') {
+    // Save backup before overwriting
+    const backupDir = getBackupDir();
+    const backupPath = path.join(backupDir, Buffer.from(filePath).toString('base64url'));
+    fs.mkdirSync(backupDir, { recursive: true });
+    if (!fs.existsSync(backupPath)) {
+      fs.copyFileSync(filePath, backupPath);
+    }
     outPath = filePath;
+    result._backupPath = backupPath;
   } else if (outputMode === 'suffix') {
     const base = path.basename(filePath, path.extname(filePath));
     outPath = path.join(path.dirname(filePath), base + '_compressed' + outExt);
@@ -101,6 +114,7 @@ function writeOutputFile(result, filePath, filePaths, options) {
     outPath = path.join(outputDir, relOut);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
   }
+  result._outputMode = outputMode;
 
   if (outPath) {
     fs.writeFileSync(outPath, result.buffer);
@@ -199,7 +213,6 @@ ipcMain.handle('open-in-finder', async (event, filePath) => {
   shell.showItemInFolder(filePath);
 });
 
-
 // ─── Read image as data URL for comparison ──────────────────────
 ipcMain.handle('read-image-dataurl', async (event, filePath) => {
   try {
@@ -214,3 +227,36 @@ ipcMain.handle('read-image-dataurl', async (event, filePath) => {
 });
 
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+// ─── Restore original file ─────────────────────────────────────
+ipcMain.handle('restore-original', async (event, filePath, backupPath, outputMode) => {
+  try {
+    if (outputMode === 'replace' && backupPath && fs.existsSync(backupPath)) {
+      fs.copyFileSync(backupPath, filePath);
+      fs.unlinkSync(backupPath);
+      return { success: true, filePath };
+    } else if (outputMode === 'suffix') {
+      const ext = path.extname(filePath);
+      const base = path.basename(filePath, ext);
+      const dir = path.dirname(filePath);
+      const compressedPath = path.join(dir, base + '_compressed' + ext);
+      if (fs.existsSync(compressedPath)) {
+        fs.unlinkSync(compressedPath);
+      }
+      return { success: true, filePath };
+    } else if (outputMode === 'folder') {
+      if (backupPath && fs.existsSync(backupPath)) {
+        fs.unlinkSync(backupPath);
+      }
+      return { success: true, filePath };
+    }
+    return { success: false, error: '无法恢复' };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// ─── Compress single file with new quality ─────────────────────
+ipcMain.handle('compress-single', async (event, filePath, options) => {
+  return await compressImage(filePath, options);
+});
