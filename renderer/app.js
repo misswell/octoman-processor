@@ -29,7 +29,6 @@ const outputDirDisplay = document.getElementById('outputDirDisplay');
 const comparePanel = document.getElementById('comparePanel');
 const compareOriginalImg = document.getElementById('compareOriginalImg');
 const compareCompressedImg = document.getElementById('compareCompressedImg');
-const compareRange = document.getElementById('compareRange');
 const compareHandle = document.getElementById('compareHandle');
 const compareFilename = document.getElementById('compareFilename');
 const compareOriginalSize = document.getElementById('compareOriginalSize');
@@ -42,6 +41,8 @@ const outputDirRow = document.getElementById('outputDirRow');
 // Quality slider
 qualitySlider.addEventListener('input', () => {
   qualityValue.textContent = qualitySlider.value + '%';
+  const pct = qualitySlider.value;
+  qualitySlider.style.background = 'linear-gradient(90deg, var(--primary) ' + pct + '%, #e2e8f0 ' + pct + '%)';
 });
 
 // Output mode radio
@@ -263,7 +264,7 @@ function showResults() {
         <button class="btn-icon" onclick="saveResult('${r.file.replace(/'/g, "\\'")}')" title="另存为">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M11 0H3a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V1a1 1 0 00-1-1zm-1 12H4V2h6v10z"/></svg>
         </button>
-        <button class="btn-icon" onclick="openCompare(results.find(rr => rr.file === '${r.file.replace(/'/g, "\\'")}'))" title="对比查看">
+        <button class="btn-icon" onclick="openCompareByFile('${r.file.replace(/'/g, "\\'")}')" title="对比查看">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 2h4v4H2V2zm0 6h4v4H2V8zm6-6h4v4H8V2zm0 6h4v4H8V8z"/></svg>
         </button>
         <button class="btn-icon" onclick="restoreOriginal('${r.file.replace(/'/g, "\\'")}', '${r._backupPath || ""}', '${r._outputMode || "suffix"}')" title="恢复原图">
@@ -406,9 +407,8 @@ async function openCompare(result) {
   // Overlay layer = original image (clipped by slider)
   compareOriginalImg.src = originalDataUrl;
 
-  // Reset slider
-  compareRange.value = 50;
-  updateCompareSlider(50);
+   // Reset slider to center
+   updateCompareSlider(50);
 
   // Set info
   compareFilename.textContent = result.file.split('/').pop() || result.file.split('\\').pop();
@@ -417,20 +417,23 @@ async function openCompare(result) {
   compareSavings.textContent = (result.savings >= 0 ? '-' : '+') + Math.abs(result.savings).toFixed(1) + '%';
   compareAlgorithm.textContent = result.algorithm || '?';
 
-  // Show panel
-  comparePanel.style.display = 'block';
-  comparePanel.scrollIntoView({ behavior: 'smooth' });
+  // Show modal with backdrop
+  document.getElementById('modalBackdrop').style.display = 'block';
+  comparePanel.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
 }
 
 function updateCompareSlider(value) {
   const pct = value + '%';
   // Use clip-path to reveal the overlay image from left to right
   compareOriginalImg.style.clipPath = 'inset(0 ' + (100 - value) + '% 0 0)';
-  compareHandle.style.left = pct;
+  compareHandle.style.transform = 'translateX(-50%) translateX(' + (value - 50) + '%)';
 }
 
 function closeCompare() {
   comparePanel.style.display = 'none';
+  document.getElementById('modalBackdrop').style.display = 'none';
+  document.body.style.overflow = '';
   if (compareCompressedImg.src) {
     URL.revokeObjectURL(compareCompressedImg.src);
   }
@@ -448,13 +451,61 @@ if (recompressQualitySlider) {
   });
 }
 
-compareRange.addEventListener('input', () => {
-  updateCompareSlider(compareRange.value);
-});
+// Custom drag handler for compare slider (more reliable than hidden range input)
+ (function setupCompareDrag() {
+   const container = document.getElementById('compareSliderContainer');
+   const sliderBar = document.getElementById('compareSliderBar');
+   if (!container) return;
+ 
+   let isDragging = false;
+ 
+   function getPercent(clientX) {
+     const rect = container.getBoundingClientRect();
+     const x = clientX - rect.left;
+     return Math.max(0, Math.min(100, (x / rect.width) * 100));
+   }
+ 
+   function updateFromEvent(e) {
+     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+     const pct = getPercent(clientX);
+     if (sliderBar) sliderBar.value = pct;
+     updateCompareSlider(pct);
+   }
+ 
+   function onPointerDown(e) {
+     isDragging = true;
+     e.preventDefault();
+     updateFromEvent(e);
+   }
+ 
+   function onPointerMove(e) {
+     if (!isDragging) return;
+     e.preventDefault();
+     updateFromEvent(e);
+   }
+ 
+   function onPointerUp() {
+     isDragging = false;
+   }
+ 
+   container.addEventListener('mousedown', onPointerDown);
+   container.addEventListener('touchstart', onPointerDown, { passive: false });
+   document.addEventListener('mousemove', onPointerMove);
+   document.addEventListener('mouseup', onPointerUp);
+   document.addEventListener('touchmove', onPointerMove, { passive: false });
+   document.addEventListener('touchend', onPointerUp);
+ 
+   // Also let the visible slider bar directly control the position
+   if (sliderBar) {
+     sliderBar.addEventListener('input', function() {
+       updateCompareSlider(this.value);
+     });
+   }
+ })();
 
 // Keyboard shortcut: Escape to close
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && comparePanel.style.display === 'block') {
+  if (e.key === 'Escape' && comparePanel.style.display !== 'none') {
     closeCompare();
   }
 });
@@ -475,3 +526,31 @@ function showToast(message) {
     setTimeout(() => toast.remove(), 300);
   }, 2500);
 }
+
+// Restore from compare modal
+async function restoreFromCompare() {
+  if (!currentCompareResult) return;
+  const r = currentCompareResult;
+  await restoreOriginal(r.file, r._backupPath || '', r._outputMode || 'suffix');
+  closeCompare();
+}
+
+// Toggle window controls / about
+function toggleWindowControls() {
+  showToast('Octor Compressor v' + (window.appVersion || '1.1.0'));
+}
+
+// Helper to find result by file path and open compare
+function openCompareByFile(filePath) {
+  const result = results.find(r => r.file === filePath);
+  if (result) openCompare(result);
+}
+
+// Init quality slider gradient
+(function() {
+  const qs = document.getElementById('qualitySlider');
+  if (qs) {
+    const pct = qs.value;
+    qs.style.background = 'linear-gradient(90deg, var(--primary) ' + pct + '%, #e2e8f0 ' + pct + '%)';
+  }
+})();
