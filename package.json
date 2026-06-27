@@ -1,7 +1,7 @@
 {
   "name": "octor-compressor",
   "version": "1.1.0",
-  "description": "Octor Compressor - 免费开源的图片压缩神器支持 PNG/JPEG/WebP/AVIF/JPEG XL 格式，集成 Squoosh/Sharp/pngquant/mozjpeg/gifsicle/oxipng 多引擎",
+  "description": "Octor Compressor - \u514d\u8d39\u5f00\u6e90\u7684\u56fe\u7247\u538b\u7f29\u795e\u5668\u652f\u6301 PNG/JPEG/WebP/AVIF/JPEG XL \u683c\u5f0f\uff0c\u96c6\u6210 Squoosh/Sharp/pngquant/mozjpeg/gifsicle/oxipng \u591a\u5f15\u64ce",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -30,7 +30,7 @@
         "zip"
       ],
       "category": "public.app-category.utilities",
-      "icon": "assets/icon.png",
+      "icon": "assets/octo-icon.png",
       "identity": null
     },
     "win": {
@@ -38,12 +38,16 @@
         "nsis",
         "portable"
       ],
-      "icon": "assets/icon.png"
+      "icon": "assets/octo-icon.png"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "asarUnpack": [
+      "node_modules/@squoosh/lib/build/*.wasm",
+      "node_modules/@squoosh/lib/build/*.js"
+    ]
   },
   "keywords": [
     "image",

@@ -11,14 +11,11 @@ let outputDir = null;
 // DOM Elements
 const dropzone = document.getElementById('dropzone');
 const settingsPanel = document.getElementById('settingsPanel');
-const progressPanel = document.getElementById('progressPanel');
 const resultsPanel = document.getElementById('resultsPanel');
 const resultsList = document.getElementById('resultsList');
 const fileCount = document.getElementById('fileCount');
 const qualitySlider = document.getElementById('qualitySlider');
 const qualityValue = document.getElementById('qualityValue');
-const progressFill = document.getElementById('progressFill');
-const progressText = document.getElementById('progressText');
 const statOriginal = document.getElementById('statOriginal');
 const statCompressed = document.getElementById('statCompressed');
 const totalSavings = document.getElementById('totalSavings');
@@ -36,6 +33,7 @@ const compareCompressedSize = document.getElementById('compareCompressedSize');
 const compareSavings = document.getElementById('compareSavings');
 const compareAlgorithm = document.getElementById('compareAlgorithm');
 let currentCompareResult = null;
+let currentCompareZoom = 1;
 const outputDirRow = document.getElementById('outputDirRow');
 
 // Quality slider
@@ -104,18 +102,115 @@ function handleFiles(fileList) {
 function handleFilePaths(filePaths) {
   if (filePaths.length === 0) return;
 
-  files = filePaths;
-  results = [];
-  isCompressing = false;
-  outputDir = null;
-  outputDirDisplay.textContent = '未选择';
+  // Append new files, deduplicate
+  var existing = new Set(files);
+  for (var i = 0; i < filePaths.length; i++) {
+    if (!existing.has(filePaths[i])) {
+      files.push(filePaths[i]);
+      existing.add(filePaths[i]);
+    }
+  }
 
-  fileCount.textContent = `${files.length} 个文件`;
+  // Show queue panel (and settings if not yet shown)
+  var queuePanel = document.getElementById('queuePanel');
+  if (queuePanel) queuePanel.style.display = 'block';
   settingsPanel.style.display = 'block';
   resultsPanel.style.display = 'none';
-  progressPanel.style.display = 'none';
+  updateQueueSummary();
+  renderFileQueue();
+  queuePanel.scrollIntoView({ behavior: 'smooth' });
+}
 
-  settingsPanel.scrollIntoView({ behavior: 'smooth' });
+// Global state for compression
+var fileRows = {};      // filePath -> row element
+var cancelledFiles = new Set();
+var totalDone = 0;
+var totalFiles = 0;
+
+function updateQueueSummary() {
+  var summary = document.getElementById('queueSummary');
+  if (!summary) return;
+  if (isCompressing) {
+    summary.textContent = totalDone + ' / ' + totalFiles + ' 已完成';
+  } else {
+    summary.textContent = files.length + ' 个文件';
+  }
+}
+
+function renderFileQueue() {
+  var list = document.getElementById('fileQueueList');
+  if (!list) return;
+  list.innerHTML = '';
+  fileRows = {};
+  for (var i = 0; i < files.length; i++) {
+    var row = createQueueRow(files[i]);
+    fileRows[files[i]] = row;
+    list.appendChild(row);
+  }
+}
+
+function createQueueRow(filePath) {
+  var row = document.createElement('div');
+  row.className = 'file-queue-item waiting';
+  row.dataset.file = filePath;
+  var name = filePath.split('/').pop() || filePath;
+  var origSize = '';
+  try { origSize = formatBytes(fs.statSync(filePath).size); } catch (e) {}
+  row.innerHTML =
+    '<span class="queue-item-icon">○</span>' +
+    '<span class="queue-item-name">' + name + '</span>' +
+    '<span class="queue-item-size">' + origSize + '</span>' +
+    '<span class="queue-item-status">等待中</span>' +
+    '<button class="queue-item-remove" title="移除">×</button>' +
+    '<div class="progress-file-bar"></div>';
+  var rmBtn = row.querySelector('.queue-item-remove');
+  rmBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (row.classList.contains('waiting')) {
+      // If compressing, notify main process to skip
+      if (isCompressing) {
+        cancelledFiles.add(filePath);
+        ipcRenderer.invoke('cancel-file', filePath);
+      }
+      // Remove from files array
+      var idx = files.indexOf(filePath);
+      if (idx >= 0) files.splice(idx, 1);
+      // Update UI
+      row.classList.remove('waiting');
+      row.classList.add('cancelled');
+      row.querySelector('.queue-item-icon').textContent = '—';
+      row.querySelector('.queue-item-status').textContent = '已移除';
+      row.querySelector('.queue-item-remove').style.display = 'none';
+      if (!isCompressing) {
+        updateQueueSummary();
+      } else {
+        totalFiles--;
+        updateQueueSummary();
+      }
+    }
+  });
+  return row;
+}
+
+// Clear all files with confirmation
+function clearAllFiles() {
+  if (files.length === 0) return;
+  if (!confirm('确定要清空全部 ' + files.length + ' 个文件吗？')) return;
+  files = [];
+  results = [];
+  fileRows = {};
+  cancelledFiles.clear();
+  totalDone = 0;
+  totalFiles = 0;
+  isCompressing = false;
+  var queuePanel = document.getElementById('queuePanel');
+  if (queuePanel) queuePanel.style.display = 'none';
+  settingsPanel.style.display = 'none';
+  resultsPanel.style.display = 'none';
+  var list = document.getElementById('fileQueueList');
+  if (list) list.innerHTML = '';
+  var stats = document.getElementById('queueStats');
+  if (stats) stats.style.display = 'none';
 }
 
 // Compression
@@ -131,7 +226,6 @@ async function startCompression() {
   const smartMode = document.getElementById('smartMode').checked;
   const convertToWebp = document.getElementById('convertToWebp').checked;
 
-  // Determine effective output format
   let effectiveFormat = outputFormat;
   if (convertToWebp && outputFormat === 'original') {
     effectiveFormat = 'webp';
@@ -154,37 +248,73 @@ async function startCompression() {
     return;
   }
 
-  // Use compress-smart IPC if smart mode or format conversion is enabled
   const useSmartIpc = smartMode || effectiveFormat !== 'original';
 
-  // Show progress
-  progressPanel.style.display = 'block';
-  resultsPanel.style.display = 'none';
-  progressFill.style.width = '0%';
-  progressText.textContent = `0 / ${files.length}`;
+  // Show stats, reset counters
+  var queueStats = document.getElementById('queueStats');
+  if (queueStats) queueStats.style.display = 'flex';
   statOriginal.textContent = '0B';
   statCompressed.textContent = '0B';
   totalSavings.textContent = '0B';
   totalRate.textContent = '0%';
 
-  // Listen for progress
+  // Update all existing rows to "waiting" state (in case of re-compress)
+  cancelledFiles.clear();
+  totalDone = 0;
+  totalFiles = files.length;
+  updateQueueSummary();
+
+  // Disable start button during compression
+  var startBtn = document.getElementById('startCompressBtn');
+  if (startBtn) startBtn.disabled = true;
+
+  // Re-render queue to reset any done/failed states
+  renderFileQueue();
+
+  // Progress handler - updates existing rows in place
   const progressHandler = (event, data) => {
-    const { current, total, file, result } = data;
-    const pct = Math.min((current / total) * 100, 100);
-    progressFill.style.width = pct + '%';
-    progressText.textContent = `${current} / ${total}`;
+    var file = data.file, result = data.result, status = data.status;
+    var row = fileRows[file];
+    if (!row) return;
+
+    if (status === 'starting') {
+      row.classList.remove('waiting');
+      row.classList.add('compressing');
+      row.querySelector('.queue-item-icon').innerHTML = '<span class="progress-file-spinner"></span>';
+      row.querySelector('.queue-item-status').textContent = '压缩中…';
+      var rmBtn = row.querySelector('.queue-item-remove');
+      if (rmBtn) rmBtn.style.display = 'none';
+    }
 
     if (result) {
+      row.classList.remove('compressing');
+      row.classList.add(result.success ? 'done' : 'failed');
+      row.querySelector('.queue-item-icon').innerHTML = result.success ? '✓' : '✗';
+      var sizeEl = row.querySelector('.queue-item-size');
+      if (result.success && sizeEl) {
+        sizeEl.textContent = formatBytes(result.originalSize) + ' → ' + formatBytes(result.compressedSize);
+      }
+      var savingsText = result.success
+        ? (result.savings >= 0 ? '-' : '+') + Math.abs(result.savings).toFixed(1) + '%'
+        : '失败';
+      row.querySelector('.queue-item-status').textContent = savingsText;
       results.push(result);
       updateStats();
+      totalDone++;
+      updateQueueSummary();
+    }
+
+    if (status === 'cancelled' && row) {
+      row.classList.add('cancelled');
+      row.querySelector('.queue-item-icon').textContent = '—';
+      row.querySelector('.queue-item-status').textContent = '已跳过';
     }
   };
 
   ipcRenderer.on('compress-progress', progressHandler);
 
   try {
-    const compressResults = await ipcRenderer.invoke(useSmartIpc ? 'compress-smart' : 'compress-files', files, options);
-    results = compressResults;
+    await ipcRenderer.invoke(useSmartIpc ? 'compress-smart' : 'compress-files', files, options);
     updateStats();
     showResults();
   } catch (err) {
@@ -193,7 +323,8 @@ async function startCompression() {
   } finally {
     ipcRenderer.removeListener('compress-progress', progressHandler);
     isCompressing = false;
-    progressFill.style.width = '100%';
+    if (startBtn) startBtn.disabled = false;
+    updateQueueSummary();
   }
 }
 
@@ -330,10 +461,19 @@ async function exportAll() {
 function clearResults() {
   results = [];
   files = [];
+  fileRows = {};
+  cancelledFiles.clear();
+  totalDone = 0;
+  totalFiles = 0;
   resultsList.innerHTML = '';
   resultsPanel.style.display = 'none';
-  progressPanel.style.display = 'none';
+  var queuePanel = document.getElementById('queuePanel');
+  if (queuePanel) queuePanel.style.display = 'none';
+  var queueStats = document.getElementById('queueStats');
+  if (queueStats) queueStats.style.display = 'none';
   settingsPanel.style.display = 'none';
+  var list = document.getElementById('fileQueueList');
+  if (list) list.innerHTML = '';
 }
 
 function formatBytes(bytes) {
@@ -401,14 +541,26 @@ async function openCompare(result) {
   }
 
   // Set images
-  // Base layer = compressed image
   const compressedBlob = new Blob([result.buffer], { type: 'image/' + (result.type || 'png') });
   compareCompressedImg.src = URL.createObjectURL(compressedBlob);
-  // Overlay layer = original image (clipped by slider)
   compareOriginalImg.src = originalDataUrl;
 
-   // Reset slider to center
-   updateCompareSlider(50);
+  // Set container aspect-ratio to match image, eliminating object-fit
+  // letterboxing so clip-path maps directly to image pixels (no offset).
+  var outer = document.getElementById('compareSliderOuter');
+  var setRatio = function() {
+    var w = compareOriginalImg.naturalWidth || compareCompressedImg.naturalWidth;
+    var h = compareOriginalImg.naturalHeight || compareCompressedImg.naturalHeight;
+    if (w && h) {
+      outer.style.aspectRatio = w + ' / ' + h;
+    }
+  };
+  if (compareOriginalImg.naturalWidth) setRatio();
+  else compareOriginalImg.onload = setRatio;
+
+  // Reset zoom and slider
+  setCompareZoom(1);
+  updateCompareSlider(50);
 
   // Set info
   compareFilename.textContent = result.file.split('/').pop() || result.file.split('\\').pop();
@@ -423,85 +575,206 @@ async function openCompare(result) {
   document.body.style.overflow = 'hidden';
 }
 
+// ── Compare slider: clip-path + handle position ──────────────────
+// The clip line position is stored as a percentage [0-100] of the
+// VISIBLE container width (not the full image). When zoomed in,
+// updateCompareSlider translates this to an absolute image-space
+// percentage for the clip-path.
 function updateCompareSlider(value) {
-  const pct = value + '%';
-  // Use clip-path to reveal the overlay image from left to right
-  compareOriginalImg.style.clipPath = 'inset(0 ' + (100 - value) + '% 0 0)';
-  compareHandle.style.transform = 'translateX(-50%) translateX(' + (value - 50) + '%)';
+  var sliderBar = document.getElementById('compareRange');
+  if (sliderBar) sliderBar.value = Math.round(value);
+
+  var outer = document.getElementById('compareSliderOuter');
+  var container = document.getElementById('compareSliderContainer');
+  var zoom = currentCompareZoom || 1;
+  var cw = outer.clientWidth;
+  var sl = container.scrollLeft;
+
+  // The clip line in screen pixels (from left edge of viewport)
+  var clipLinePx = sl + (value / 100) * cw;
+  // Total image width in pixels
+  var imgWidth = cw * zoom;
+  // Convert to percentage of image width for clip-path
+  var clipLinePct = (clipLinePx / imgWidth) * 100;
+  var clipRight = Math.max(0, Math.min(100, 100 - clipLinePct));
+
+  compareOriginalImg.style.clipPath = 'inset(0 ' + clipRight + '% 0 0)';
+  // Move handle to the screen position (percentage of visible width)
+  compareHandle.style.left = value + '%';
 }
 
+// ── Zoom: zoom toward the compare axis position ──────────────────
+// Before changing zoom, record which image point sits under the
+// compare axis. After zoom, scroll so that the same image point
+// remains under the axis. Vertically, zoom toward viewport center.
+function setCompareZoom(level) {
+  level = Math.max(0.1, Math.min(8, level));
+  var outer = document.getElementById('compareSliderOuter');
+  var container = document.getElementById('compareSliderContainer');
+  var oldZoom = currentCompareZoom || 1;
+  var cw = outer.clientWidth;
+  var ch = outer.clientHeight;
+
+  // Current slider value (0-100, percentage of visible width)
+  var sliderBar = document.getElementById('compareRange');
+  var sliderVal = sliderBar ? parseFloat(sliderBar.value) : 50;
+
+  // Image point under the compare axis (normalized 0-1 of full image)
+  var axisImgX = (container.scrollLeft + (sliderVal / 100) * cw) / (cw * oldZoom);
+  // Vertical center point (normalized 0-1 of full image)
+  var centerY = (container.scrollTop + ch / 2) / (ch * oldZoom);
+
+  // Apply new zoom
+  currentCompareZoom = level;
+  container.style.setProperty('--zoom', level);
+  outer.style.setProperty('--zoom', level);
+
+  // Scroll so the same image points stay under the axis / center
+  var newImgW = cw * level;
+  var newImgH = ch * level;
+  container.scrollLeft = axisImgX * newImgW - (sliderVal / 100) * cw;
+  container.scrollTop = centerY * newImgH - ch / 2;
+
+  // Update zoom slider and label
+  var zoomSlider = document.getElementById('zoomSlider');
+  if (zoomSlider) zoomSlider.value = level;
+  var zoomValue = document.getElementById('zoomValue');
+  if (zoomValue) zoomValue.textContent = Math.round(level * 100) + '%';
+
+  // Refresh clip-path for new scroll position
+  updateCompareSlider(sliderVal);
+}
+
+// Step zoom for +/- buttons
+function stepZoom(delta) {
+  setCompareZoom(currentCompareZoom + delta);
+}
+
+// ── Fullscreen toggle ────────────────────────────────────────────
+function toggleFullscreen() {
+  comparePanel.classList.toggle('fullscreen');
+}
+
+// ── Close compare ────────────────────────────────────────────────
 function closeCompare() {
   comparePanel.style.display = 'none';
+  comparePanel.classList.remove('fullscreen');
   document.getElementById('modalBackdrop').style.display = 'none';
   document.body.style.overflow = '';
   if (compareCompressedImg.src) {
     URL.revokeObjectURL(compareCompressedImg.src);
   }
   currentCompareResult = null;
+  setCompareZoom(1);
 }
 
-// Compare range slider
-
-// Recompress quality slider
-const recompressQualitySlider = document.getElementById('recompressQuality');
-const recompressQualityValue = document.getElementById('recompressQualityValue');
+// ── Recompress quality slider ────────────────────────────────────
+var recompressQualitySlider = document.getElementById('recompressQuality');
+var recompressQualityValue = document.getElementById('recompressQualityValue');
 if (recompressQualitySlider) {
-  recompressQualitySlider.addEventListener('input', () => {
+  recompressQualitySlider.addEventListener('input', function() {
     recompressQualityValue.textContent = recompressQualitySlider.value + '%';
   });
 }
 
-// Custom drag handler for compare slider (more reliable than hidden range input)
- (function setupCompareDrag() {
-   const container = document.getElementById('compareSliderContainer');
-   const sliderBar = document.getElementById('compareSliderBar');
-   if (!container) return;
- 
-   let isDragging = false;
- 
-   function getPercent(clientX) {
-     const rect = container.getBoundingClientRect();
-     const x = clientX - rect.left;
-     return Math.max(0, Math.min(100, (x / rect.width) * 100));
-   }
- 
-   function updateFromEvent(e) {
-     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-     const pct = getPercent(clientX);
-     if (sliderBar) sliderBar.value = pct;
-     updateCompareSlider(pct);
-   }
- 
-   function onPointerDown(e) {
-     isDragging = true;
-     e.preventDefault();
-     updateFromEvent(e);
-   }
- 
-   function onPointerMove(e) {
-     if (!isDragging) return;
-     e.preventDefault();
-     updateFromEvent(e);
-   }
- 
-   function onPointerUp() {
-     isDragging = false;
-   }
- 
-   container.addEventListener('mousedown', onPointerDown);
-   container.addEventListener('touchstart', onPointerDown, { passive: false });
-   document.addEventListener('mousemove', onPointerMove);
-   document.addEventListener('mouseup', onPointerUp);
-   document.addEventListener('touchmove', onPointerMove, { passive: false });
-   document.addEventListener('touchend', onPointerUp);
- 
-   // Also let the visible slider bar directly control the position
-   if (sliderBar) {
-     sliderBar.addEventListener('input', function() {
-       updateCompareSlider(this.value);
-     });
-   }
- })();
+// ── Compare interaction: hover-follow + drag + wheel zoom ────────
+(function setupCompareDrag() {
+  var outer = document.getElementById('compareSliderOuter');
+  var container = document.getElementById('compareSliderContainer');
+  var sliderBar = document.getElementById('compareRange');
+  if (!outer || !container) return;
+
+  var isPointerDown = false;
+
+  function getPercent(clientX) {
+    var rect = outer.getBoundingClientRect();
+    var x = clientX - rect.left;
+    return Math.max(0, Math.min(100, (x / rect.width) * 100));
+  }
+
+  // Mouse-hover follow: move clip line to cursor position.
+  outer.addEventListener('mousemove', function(e) {
+    var pct = getPercent(e.clientX);
+    updateCompareSlider(pct);
+  });
+
+  // Touch / drag support
+  function onPointerDown(e) {
+    isPointerDown = true;
+    e.preventDefault();
+    var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    updateCompareSlider(getPercent(clientX));
+  }
+
+  function onPointerMove(e) {
+    if (!isPointerDown) return;
+    e.preventDefault();
+    var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    updateCompareSlider(getPercent(clientX));
+  }
+
+  function onPointerUp() { isPointerDown = false; }
+
+  outer.addEventListener('mousedown', onPointerDown);
+  outer.addEventListener('touchstart', onPointerDown, { passive: false });
+  document.addEventListener('mousemove', onPointerMove);
+  document.addEventListener('mouseup', onPointerUp);
+  document.addEventListener('touchmove', onPointerMove, { passive: false });
+  document.addEventListener('touchend', onPointerUp);
+
+  // Slider bar direct control
+  if (sliderBar) {
+    sliderBar.addEventListener('input', function() {
+      updateCompareSlider(this.value);
+    });
+  }
+
+  // Wheel zoom: zoom toward mouse position
+  outer.addEventListener('wheel', function(e) {
+    if (!e.ctrlKey && !e.metaKey) return; // require Ctrl/Cmd for zoom
+    e.preventDefault();
+    var oldZoom = currentCompareZoom || 1;
+    var delta = e.deltaY < 0 ? 0.25 : -0.25;
+    var newZoom = Math.max(0.1, Math.min(8, oldZoom + delta));
+
+    // Zoom toward mouse X position
+    var rect = outer.getBoundingClientRect();
+    var mouseX = e.clientX - rect.left;
+    var mousePct = (mouseX / rect.width) * 100;
+
+    var cw = outer.clientWidth;
+    var ch = outer.clientHeight;
+    var mouseImgX = (container.scrollLeft + mouseX) / (cw * oldZoom);
+    var mouseImgY = (container.scrollTop + (e.clientY - rect.top)) / (ch * oldZoom);
+
+    currentCompareZoom = newZoom;
+    container.style.setProperty('--zoom', newZoom);
+    container.scrollLeft = mouseImgX * (cw * newZoom) - mouseX;
+    container.scrollTop = mouseImgY * (ch * newZoom) - (e.clientY - rect.top);
+
+    var zoomSlider = document.getElementById('zoomSlider');
+    if (zoomSlider) zoomSlider.value = newZoom;
+    var zoomValue = document.getElementById('zoomValue');
+    if (zoomValue) zoomValue.textContent = Math.round(newZoom * 100) + '%';
+
+    // Keep clip line at the same image point
+    var sliderVal = sliderBar ? parseFloat(sliderBar.value) : 50;
+    updateCompareSlider(sliderVal);
+  }, { passive: false });
+
+  // Update clip-path when scrolling
+  container.addEventListener('scroll', function() {
+    if (sliderBar) updateCompareSlider(sliderBar.value);
+  });
+
+  // Zoom slider control
+  var zoomSliderEl = document.getElementById('zoomSlider');
+  if (zoomSliderEl) {
+    zoomSliderEl.addEventListener('input', function() {
+      setCompareZoom(parseFloat(this.value));
+    });
+  }
+})();
 
 // Keyboard shortcut: Escape to close
 document.addEventListener('keydown', (e) => {

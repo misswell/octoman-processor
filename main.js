@@ -2,15 +2,52 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+
+// ─── Fix Squoosh WASM loading in asar ───────────────────────────
+// Squoosh Emscripten modules pass raw filesystem paths (with spaces)
+// to fetch(), which can't parse them. Also, WASM files inside app.asar
+// are not readable. This patch intercepts WASM fetch requests and
+// serves them directly from disk, redirecting .asar/ to .asar.unpacked/.
+const origFetch = globalThis.fetch;
+globalThis.fetch = async function squooshWasmFetch(input, init) {
+  if (typeof input === 'string' && input.includes('.wasm')) {
+    // Skip http(s) URLs
+    if (!input.startsWith('http')) {
+      try {
+        let filePath = input;
+        // Strip file:// prefix
+        if (filePath.startsWith('file://')) {
+          filePath = new URL(filePath).pathname;
+        }
+        // Decode percent-encoded characters (e.g. spaces)
+        filePath = decodeURIComponent(filePath);
+        // Redirect from .asar/ to .asar.unpacked/
+        if (filePath.includes('.asar/')) {
+          filePath = filePath.replace('.asar/', '.asar.unpacked/');
+        }
+        const buf = fs.readFileSync(filePath);
+        return new Response(buf, {
+          status: 200,
+          headers: { 'Content-Type': 'application/wasm' },
+        });
+      } catch (_) {
+        // Fall through to original fetch
+      }
+    }
+  }
+  return origFetch(input, init);
+};
+
+
 const { compressImage, compressSmart, compressToFormat, compressWithSharp, detectImageType, formatBytes } = require('./compression/engine');
 
 let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 720,
-    minWidth: 800,
+    width: 760,
+    height: 680,
+    minWidth: 640,
     minHeight: 600,
     webPreferences: {
       nodeIntegration: true,
@@ -123,14 +160,60 @@ function writeOutputFile(result, filePath, filePaths, options) {
   return outPath;
 }
 
+// ─── Queue cancellation support ────────────────────────────────
+const cancelQueue = new Set();
+
+ipcMain.handle('cancel-file', (event, filePath) => {
+  cancelQueue.add(filePath);
+  return true;
+});
+
+ipcMain.handle('clear-cancel-queue', () => {
+  cancelQueue.clear();
+  return true;
+});
+
 // ─── Legacy compress handler ────────────────────────────────────
 ipcMain.handle('compress-files', async (event, filePaths, options) => {
+  cancelQueue.clear();
   const results = [];
   const allFiles = collectImageFiles(filePaths);
   const total = allFiles.length;
   let processedCount = 0;
+  let skippedCount = 0;
+
+  // Send all files as "queued" first
+  if (mainWindow) {
+    for (const fp of allFiles) {
+      mainWindow.webContents.send('compress-progress', {
+        total, file: fp, status: 'queued',
+      });
+    }
+  }
 
   for (const filePath of allFiles) {
+    // Check if this file was cancelled
+    if (cancelQueue.has(filePath)) {
+      cancelQueue.delete(filePath);
+      skippedCount++;
+      processedCount++;
+      if (mainWindow) {
+        mainWindow.webContents.send('compress-progress', {
+          current: processedCount, total: total - skippedCount, file: filePath, status: 'cancelled',
+        });
+      }
+      continue;
+    }
+
+    // Yield to event loop so UI stays responsive
+    await new Promise(r => setImmediate(r));
+
+    // Notify renderer that this file is starting
+    if (mainWindow) {
+      mainWindow.webContents.send('compress-progress', {
+        current: processedCount, total: total - skippedCount, file: filePath, status: 'starting',
+      });
+    }
     try {
       const result = await compressImage(filePath, options);
       results.push(result);
@@ -139,7 +222,7 @@ ipcMain.handle('compress-files', async (event, filePaths, options) => {
       processedCount++;
       if (mainWindow) {
         mainWindow.webContents.send('compress-progress', {
-          current: processedCount, total, file: filePath, result,
+          current: processedCount, total: total - skippedCount, file: filePath, result,
         });
       }
     } catch (err) {
@@ -148,20 +231,59 @@ ipcMain.handle('compress-files', async (event, filePaths, options) => {
         originalSize: 0, compressedSize: 0, savings: 0,
       });
       processedCount++;
+      if (mainWindow) {
+        mainWindow.webContents.send('compress-progress', {
+          current: processedCount, total: total - skippedCount, file: filePath, result: { success: false, file: filePath },
+        });
+      }
     }
   }
 
+  cancelQueue.clear();
   return results;
 });
 
 // ─── Smart / format-conversion compress handler ─────────────────
 ipcMain.handle('compress-smart', async (event, filePaths, options) => {
+  cancelQueue.clear();
   const results = [];
   const allFiles = collectImageFiles(filePaths);
   const total = allFiles.length;
   let processedCount = 0;
+  let skippedCount = 0;
+
+  // Send all files as "queued" first
+  if (mainWindow) {
+    for (const fp of allFiles) {
+      mainWindow.webContents.send('compress-progress', {
+        total, file: fp, status: 'queued',
+      });
+    }
+  }
 
   for (const filePath of allFiles) {
+    // Check if this file was cancelled
+    if (cancelQueue.has(filePath)) {
+      cancelQueue.delete(filePath);
+      skippedCount++;
+      processedCount++;
+      if (mainWindow) {
+        mainWindow.webContents.send('compress-progress', {
+          current: processedCount, total: total - skippedCount, file: filePath, status: 'cancelled',
+        });
+      }
+      continue;
+    }
+
+    // Yield to event loop so UI stays responsive
+    await new Promise(r => setImmediate(r));
+
+    // Notify renderer that this file is starting
+    if (mainWindow) {
+      mainWindow.webContents.send('compress-progress', {
+        current: processedCount, total: total - skippedCount, file: filePath, status: 'starting',
+      });
+    }
     try {
       let result;
       const targetFormat = options.outputFormat;
@@ -181,7 +303,7 @@ ipcMain.handle('compress-smart', async (event, filePaths, options) => {
       processedCount++;
       if (mainWindow) {
         mainWindow.webContents.send('compress-progress', {
-          current: processedCount, total, file: filePath, result,
+          current: processedCount, total: total - skippedCount, file: filePath, result,
         });
       }
     } catch (err) {
@@ -190,9 +312,15 @@ ipcMain.handle('compress-smart', async (event, filePaths, options) => {
         originalSize: 0, compressedSize: 0, savings: 0,
       });
       processedCount++;
+      if (mainWindow) {
+        mainWindow.webContents.send('compress-progress', {
+          current: processedCount, total: total - skippedCount, file: filePath, result: { success: false, file: filePath },
+        });
+      }
     }
   }
 
+  cancelQueue.clear();
   return results;
 });
 

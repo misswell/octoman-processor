@@ -101,6 +101,68 @@ npm start
 npm run website
 ```
 
+## 📦 打包部署
+
+### 环境要求
+
+- **Node.js ≥ 18**（推荐 v20 LTS）
+- **npm ≥ 10**
+- **macOS**: Xcode Command Line Tools
+- **Windows**: 需在 Windows 环境下打包
+
+> ⚠️ Node.js v14 过旧，无法安装最新依赖。建议使用 nvm 管理 Node 版本：
+> ```bash
+> nvm install v20.19.5
+> nvm use v20.19.5
+> ```
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+`postinstall` 钩子会自动执行 `electron-builder install-app-deps` 编译原生模块。
+
+### 打包命令
+
+| 命令 | 产物 | 说明 |
+|------|------|------|
+| `npm run dist:mac` | `.dmg` + `.zip` | macOS ARM64 安装包和压缩包 |
+| `npm run dist:win` | `.exe` (NSIS) + `.exe` (Portable) | Windows 安装包和便携版 |
+| `npm run dist` | 所有平台 | 全平台打包 |
+| `npm run pack` | 目录 | 仅打包目录（不生成安装包） |
+
+打包产物输出到 `release/` 目录：
+
+```
+release/
+├── Octor Compressor-1.1.0-arm64.dmg          # macOS 安装镜像
+├── Octor Compressor-1.1.0-arm64.dmg.blockmap # DMG 增量更新映射
+├── Octor Compressor-1.1.0-arm64-mac.zip      # macOS 压缩包
+├── Octor Compressor-1.1.0-arm64-mac.zip.blockmap
+└── mac-arm64/
+    └── Octor Compressor.app/                 # 未打包的 .app 目录
+```
+
+### 应用图标
+
+应用图标源文件为 `assets/octo-icon.png`（约 986KB），打包时 electron-builder 自动转换为 `icon.icns`（macOS）和 `.ico`（Windows）。
+
+如需更换图标，替换 `assets/octo-icon.png` 后重新打包即可。
+
+### 注意事项
+
+1. **macOS 代码签名**: `package.json` 中 `mac.identity` 设为 `null`，打包跳过签名。如需正式分发，需配置 Apple Developer 证书。
+2. **Node.js 版本**: 务必使用 Node.js ≥ 18，推荐 v20 LTS。低版本会导致 `sharp` 等原生模块安装失败。
+3. **CLI 压缩工具**: 打包后的应用在用户机器上仍需安装以下 CLI 工具才能使用对应引擎：
+   ```bash
+   brew install pngquant gifsicle webp oxipng jpeg-xl libavif
+   ```
+4. **Sharp 模块**: `sharp` 为原生 Node.js 模块，`postinstall` 会在当前架构下自动编译。跨平台打包时需在目标平台上执行。
+5. **发布 Release**: 打包完成后，将 `release/` 目录下的 `.dmg`、`.zip` 和 `.blockmap` 文件上传到 GitHub Releases 即可。
+
+
 ## 🏗️ 项目结构
 
 ```

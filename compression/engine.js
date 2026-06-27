@@ -4,6 +4,9 @@ const path = require('path');
 const os = require('os');
 const util = require('util');
 
+// Promisified exec for non-blocking CLI calls (prevents UI freeze)
+const execAsync = util.promisify(exec);
+
 // ─── Backend availability detection ─────────────────────────────
 let sharp = null;
 let squoosh = null;
@@ -19,7 +22,62 @@ function loadSharp() {
 function loadSquoosh() {
   if (squoosh === null) {
     try {
-      squoosh = require('@squoosh/lib');
+      // When packaged in asar, Squoosh's WASM files can't be loaded via fetch()
+      // because: (1) paths contain spaces ("Octor Compressor.app"),
+      // (2) files are inside the virtual asar filesystem, and
+      // (3) Squoosh creates worker_threads that have their own unpatched fetch.
+      // Fix: copy the build directory to a temp location and inject a fetch
+      // override into index.js so all workers use fs.readFileSync for WASM.
+      let modulePath = '@squoosh/lib';
+      try {
+        const resolved = require.resolve('@squoosh/lib');
+        // require.resolve returns .../build/index.js, so dirname IS the build dir
+        const buildDir = path.dirname(resolved);
+        if (buildDir.includes('.asar')) {
+          const unpackedDir = buildDir.replace('.asar', '.asar.unpacked');
+          const tempDir = path.join(os.tmpdir(), 'octor-squoosh-build');
+          // Copy all files to temp directory (no spaces, no asar)
+          fs.mkdirSync(tempDir, { recursive: true });
+          const files = fs.readdirSync(unpackedDir);
+          for (const f of files) {
+            const src = path.join(unpackedDir, f);
+            const dst = path.join(tempDir, f);
+            if (!fs.existsSync(dst) || fs.statSync(src).mtimeMs > fs.statSync(dst).mtimeMs) {
+              fs.copyFileSync(src, dst);
+            }
+          }
+          // Patch index.js: prepend a fetch override that handles .wasm requests
+          // by reading from disk instead of using undici fetch (which can't
+          // parse plain filesystem paths or file:// URLs with spaces).
+          const indexJsPath = path.join(tempDir, 'index.js');
+          let content = fs.readFileSync(indexJsPath, 'utf8');
+          const patchMarker = '/* OCTOR_FETCH_PATCH */';
+          if (!content.startsWith(patchMarker)) {
+            content = patchMarker + '\n' +
+              '(function(){\n' +
+              '  var _fs=require("fs"),_url=require("url");\n' +
+              '  var _origFetch=globalThis.fetch;\n' +
+              '  globalThis.fetch=function(input,init){\n' +
+              '    if(typeof input==="string"&&input.includes(".wasm")){\n' +
+              '      try{\n' +
+              '        var p=input;\n' +
+              '        if(p.startsWith("file://")){p=_url.fileURLToPath(p);}\n' +
+              '        p=decodeURIComponent(p);\n' +
+              '        var buf=_fs.readFileSync(p);\n' +
+              '        return Promise.resolve(new Response(buf,{status:200,headers:{"Content-Type":"application/wasm"}}));\n' +
+              '      }catch(e){return Promise.reject(e);}\n' +
+              '    }\n' +
+              '    return _origFetch?_origFetch(input,init):Promise.reject(new Error("fetch unavailable"));\n' +
+              '  };\n' +
+              '})();\n' + content;
+            fs.writeFileSync(indexJsPath, content);
+          }
+          modulePath = indexJsPath;
+        }
+      } catch (e) {
+        console.error('Squoosh asar patch error:', e.message);
+      }
+      squoosh = require(modulePath);
       squooshPool = new squoosh.ImagePool(2);
     } catch (e) { squoosh = false; console.error('Squoosh load error:', e.message); }
   }
@@ -145,7 +203,7 @@ async function compressPNG(filePath, options = {}) {
     const qLow = Math.max(quality - 10, 10);
     const qHigh = Math.min(quality + 10, 100);
     const cmd = `"${PNGQUANT}" --quality=${qLow}-${qHigh} --speed=3 --strip --output="${tmpFile}" -- "${filePath}" 2>/dev/null`;
-    execSync(cmd, { timeout: 30000 });
+    await execAsync(cmd, { timeout: 30000 });
 
     if (fs.existsSync(tmpFile) && getFileSize(tmpFile) > 0) {
       const compressedSize = getFileSize(tmpFile);
@@ -184,7 +242,7 @@ async function compressJPG(filePath, options = {}) {
   try {
     const mozjpegPath = findTool('cjpeg');
     const cmd = `"${mozjpegPath}" -quality ${quality} -optimize -progressive -outfile "${tmpFile}" "${filePath}" 2>/dev/null`;
-    execSync(cmd, { timeout: 30000 });
+    await execAsync(cmd, { timeout: 30000 });
 
     if (fs.existsSync(tmpFile) && getFileSize(tmpFile) > 0) {
       const compressedSize = getFileSize(tmpFile);
@@ -207,7 +265,7 @@ async function compressGIF(filePath, options = {}) {
   try {
     const colors = Math.max(Math.floor(quality / 100 * 256), 32);
     const cmd = `"${GIFSICLE}" --optimize=3 --colors=${colors} --no-comments --output="${tmpFile}" "${filePath}" 2>/dev/null`;
-    execSync(cmd, { timeout: 30000 });
+    await execAsync(cmd, { timeout: 30000 });
 
     if (fs.existsSync(tmpFile) && getFileSize(tmpFile) > 0) {
       const compressedSize = getFileSize(tmpFile);
@@ -244,7 +302,7 @@ async function compressToWebP(filePath, options = {}) {
   const tmpFile = path.join(tmpDir, 'compressed.webp');
   try {
     const cmd = `"${CWEBP}" -q ${quality} -m 6 -pass 10 -mt -o "${tmpFile}" "${filePath}" 2>/dev/null`;
-    execSync(cmd, { timeout: 30000 });
+    await execAsync(cmd, { timeout: 30000 });
 
     if (fs.existsSync(tmpFile) && getFileSize(tmpFile) > 0) {
       const compressedSize = getFileSize(tmpFile);
@@ -425,7 +483,7 @@ async function compressToAVIF(filePath, options = {}) {
   const tmpFile = path.join(tmpDir, 'compressed.avif');
   try {
     const cmd = `"${AVIFENC}" --speed 6 --jobs 4 --min 0 --max ${quality} -o "${tmpFile}" "${filePath}" 2>/dev/null`;
-    execSync(cmd, { timeout: 60000 });
+    await execAsync(cmd, { timeout: 60000 });
 
     if (fs.existsSync(tmpFile) && getFileSize(tmpFile) > 0) {
       const compressedSize = getFileSize(tmpFile);
@@ -461,7 +519,7 @@ async function compressToJXL(filePath, options = {}) {
   try {
     const distance = Math.max(0.1, Math.min(15, (100 - quality) / 7));
     const cmd = `"${CJXL}" --lossless_jpeg=0 --distance ${distance.toFixed(2)} --effort 7 "${filePath}" "${tmpFile}" 2>/dev/null`;
-    execSync(cmd, { timeout: 60000 });
+    await execAsync(cmd, { timeout: 60000 });
 
     if (fs.existsSync(tmpFile) && getFileSize(tmpFile) > 0) {
       const compressedSize = getFileSize(tmpFile);
@@ -499,7 +557,7 @@ async function compressWithOxiPNG(filePath, options = {}) {
   try {
     const level = Math.min(6, Math.max(1, Math.floor((options.quality || 75) / 20)));
     const cmd = `"${OXIPNG}" -o ${level} --strip safe --out "${tmpFile}" "${filePath}" 2>/dev/null`;
-    execSync(cmd, { timeout: 60000 });
+    await execAsync(cmd, { timeout: 60000 });
 
     if (fs.existsSync(tmpFile) && getFileSize(tmpFile) > 0) {
       const compressedSize = getFileSize(tmpFile);
