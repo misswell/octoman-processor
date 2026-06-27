@@ -110,6 +110,42 @@
             <span class="toggle-label">输出为 WebP 格式（更小体积）</span>
           </div>
         </div>
+        
+        <div class="settings-row">
+          <label>输出格式</label>
+          <div class="select-wrapper">
+            <select id="outputFormat" class="settings-select">
+              <option value="original">保持原格式</option>
+              <option value="jpg">JPEG</option>
+              <option value="png">PNG</option>
+              <option value="webp">WebP</option>
+              <option value="avif">AVIF</option>
+              <option value="jxl">JPEG XL</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>压缩引擎</label>
+          <div class="select-wrapper">
+            <select id="compressionBackend" class="settings-select">
+              <option value="auto">自动选择（推荐）</option>
+              <option value="sharp">Sharp（现代引擎）</option>
+              <option value="cli">CLI 工具</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>压缩力度</label>
+          <div class="select-wrapper">
+            <select id="compressionEffort" class="settings-select">
+              <option value="4">快速</option>
+              <option value="6" selected>平衡（推荐）</option>
+              <option value="7">高质量</option>
+              <option value="9">极致压缩（慢）</option>
+            </select>
+          </div>
+        </div>
+
       </div>
       <button class="btn btn-primary btn-full" onclick="startCompression()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L2 7h4v5h4V7h4L8 1z"/></svg>
@@ -174,8 +210,66 @@
       </div>
       <div class="results-list" id="resultsList"></div>
     </div>
-  </div>
-
+  
+            <!-- Comparison Panel -->
+    <div class="compare-panel" id="comparePanel" style="display:none;">
+      <div class="compare-header">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3a5 5 0 100 10A5 5 0 008 3zm0 8V5l3 3-3 3z"/></svg>
+          原图对比
+        </h3>
+        <button class="btn btn-small" onclick="closeCompare()">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+          关闭
+        </button>
+      </div>
+      <div class="compare-body">
+        <div class="compare-slider-container" id="compareSliderContainer">
+          <!-- Base: compressed image (always fully visible) -->
+          <img id="compareCompressedImg" class="compare-img-base" alt="压缩后">
+          <!-- Overlay: original image (clipped by slider) -->
+          <img id="compareOriginalImg" class="compare-img-overlay" alt="原图">
+          <!-- Labels -->
+          <div class="compare-label label-left">原图</div>
+          <div class="compare-label label-right">压缩后</div>
+          <!-- Slider handle -->
+          <div class="compare-handle" id="compareHandle">
+            <div class="compare-handle-line"></div>
+            <div class="compare-handle-circle">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M4 3l-3 5 3 5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 3l3 5-3 5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+          <input type="range" class="compare-range" id="compareRange" min="0" max="100" value="50">
+        </div>
+        <div class="compare-info">
+          <div class="compare-info-item" style="width:100%;margin-bottom:4px;">
+            <span class="compare-info-label">文件名</span>
+            <span class="compare-info-value" id="compareFilename">-</span>
+          </div>
+          <div class="compare-info-row">
+            <div class="compare-info-item">
+              <span class="compare-info-label">原图大小</span>
+              <span class="compare-info-value original" id="compareOriginalSize">-</span>
+            </div>
+            <div class="compare-info-item">
+              <span class="compare-info-label">压缩后大小</span>
+              <span class="compare-info-value compressed" id="compareCompressedSize">-</span>
+            </div>
+            <div class="compare-info-item">
+              <span class="compare-info-label">节省</span>
+              <span class="compare-info-value savings" id="compareSavings">-</span>
+            </div>
+            <div class="compare-info-item">
+              <span class="compare-info-label">算法</span>
+              <span class="compare-info-value" id="compareAlgorithm">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   <script src="app.js"></script>
 </body>
 </html>

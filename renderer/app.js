@@ -26,6 +26,17 @@ const totalRate = document.getElementById('totalRate');
 const resultCount = document.getElementById('resultCount');
 const resultTotalSavings = document.getElementById('resultTotalSavings');
 const outputDirDisplay = document.getElementById('outputDirDisplay');
+const comparePanel = document.getElementById('comparePanel');
+const compareOriginalImg = document.getElementById('compareOriginalImg');
+const compareCompressedImg = document.getElementById('compareCompressedImg');
+const compareRange = document.getElementById('compareRange');
+const compareHandle = document.getElementById('compareHandle');
+const compareFilename = document.getElementById('compareFilename');
+const compareOriginalSize = document.getElementById('compareOriginalSize');
+const compareCompressedSize = document.getElementById('compareCompressedSize');
+const compareSavings = document.getElementById('compareSavings');
+const compareAlgorithm = document.getElementById('compareAlgorithm');
+let currentCompareResult = null;
 const outputDirRow = document.getElementById('outputDirRow');
 
 // Quality slider
@@ -113,10 +124,25 @@ async function startCompression() {
   results = [];
 
   const outputMode = document.querySelector('input[name="outputMode"]:checked').value;
+  const outputFormat = document.getElementById('outputFormat').value;
+  const backend = document.getElementById('compressionBackend').value;
+  const effort = parseInt(document.getElementById('compressionEffort').value);
+  const smartMode = document.getElementById('smartMode').checked;
+  const convertToWebp = document.getElementById('convertToWebp').checked;
+
+  // Determine effective output format
+  let effectiveFormat = outputFormat;
+  if (convertToWebp && outputFormat === 'original') {
+    effectiveFormat = 'webp';
+  }
+
   const options = {
     quality: parseInt(qualitySlider.value),
-    smartMode: document.getElementById('smartMode').checked,
-    convertToWebp: document.getElementById('convertToWebp').checked,
+    smartMode,
+    outputFormat: effectiveFormat,
+    backend,
+    effort,
+    convertToWebp,
     outputMode,
     outputDir: outputMode === 'folder' ? outputDir : null,
   };
@@ -126,6 +152,9 @@ async function startCompression() {
     isCompressing = false;
     return;
   }
+
+  // Use compress-smart IPC if smart mode or format conversion is enabled
+  const useSmartIpc = smartMode || effectiveFormat !== 'original';
 
   // Show progress
   progressPanel.style.display = 'block';
@@ -153,7 +182,7 @@ async function startCompression() {
   ipcRenderer.on('compress-progress', progressHandler);
 
   try {
-    const compressResults = await ipcRenderer.invoke('compress-files', files, options);
+    const compressResults = await ipcRenderer.invoke(useSmartIpc ? 'compress-smart' : 'compress-files', files, options);
     results = compressResults;
     updateStats();
     showResults();
@@ -218,9 +247,10 @@ function showResults() {
 
     const savingsClass = r.savings < 0 ? 'negative' : '';
     const savingsText = r.savings >= 0 ? '-' + r.savings.toFixed(1) + '%' : '+' + Math.abs(r.savings).toFixed(1) + '%';
+    const outExt = r.type || ext;
 
     item.innerHTML = `
-      <div class="result-icon ${ext}">${ext}</div>
+      <div class="result-icon ${outExt}">${outExt}</div>
       <div class="result-info">
         <div class="result-filename" title="${filename}">${filename}</div>
         <div class="result-sizes">
@@ -232,6 +262,9 @@ function showResults() {
       <div class="result-actions">
         <button class="btn-icon" onclick="saveResult('${r.file.replace(/'/g, "\\'")}')" title="另存为">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M11 0H3a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V1a1 1 0 00-1-1zm-1 12H4V2h6v10z"/></svg>
+        </button>
+        <button class="btn-icon" onclick="openCompare(results.find(rr => rr.file === '${r.file.replace(/'/g, "\\'")}'))" title="对比查看">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 2h4v4H2V2zm0 6h4v4H2V8zm6-6h4v4H8V2zm0 6h4v4H8V8z"/></svg>
         </button>
         <button class="btn-icon" onclick="openInFinder('${r.file.replace(/'/g, "\\'")}')" title="在访达中显示">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 012.5 1h3.172a1.5 1.5 0 011.06.44l.94.94H11.5A1.5 1.5 0 0113 3.88V11.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 011 11.5V2.5z"/></svg>
@@ -293,6 +326,68 @@ function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
   return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
 }
+
+
+// ─── Comparison ─────────────────────────────────────────────────
+async function openCompare(result) {
+  currentCompareResult = result;
+
+  // Load original image as data URL
+  const originalDataUrl = await ipcRenderer.invoke('read-image-dataurl', result.file);
+  if (!originalDataUrl) {
+    showToast('无法加载原图');
+    return;
+  }
+
+  // Set images
+  // Base layer = compressed image
+  const compressedBlob = new Blob([result.buffer], { type: 'image/' + (result.type || 'png') });
+  compareCompressedImg.src = URL.createObjectURL(compressedBlob);
+  // Overlay layer = original image (clipped by slider)
+  compareOriginalImg.src = originalDataUrl;
+
+  // Reset slider
+  compareRange.value = 50;
+  updateCompareSlider(50);
+
+  // Set info
+  compareFilename.textContent = result.file.split('/').pop() || result.file.split('\\').pop();
+  compareOriginalSize.textContent = result.originalSizeFormatted || '?';
+  compareCompressedSize.textContent = result.compressedSizeFormatted || '?';
+  compareSavings.textContent = (result.savings >= 0 ? '-' : '+') + Math.abs(result.savings).toFixed(1) + '%';
+  compareAlgorithm.textContent = result.algorithm || '?';
+
+  // Show panel
+  comparePanel.style.display = 'block';
+  comparePanel.scrollIntoView({ behavior: 'smooth' });
+}
+
+function updateCompareSlider(value) {
+  const pct = value + '%';
+  // Use clip-path to reveal the overlay image from left to right
+  compareOriginalImg.style.clipPath = 'inset(0 ' + (100 - value) + '% 0 0)';
+  compareHandle.style.left = pct;
+}
+
+function closeCompare() {
+  comparePanel.style.display = 'none';
+  if (compareCompressedImg.src) {
+    URL.revokeObjectURL(compareCompressedImg.src);
+  }
+  currentCompareResult = null;
+}
+
+// Compare range slider
+compareRange.addEventListener('input', () => {
+  updateCompareSlider(compareRange.value);
+});
+
+// Keyboard shortcut: Escape to close
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && comparePanel.style.display === 'block') {
+    closeCompare();
+  }
+});
 
 // Toast notification
 function showToast(message) {
