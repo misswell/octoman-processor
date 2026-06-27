@@ -1,7 +1,7 @@
 {
-  "name": "octoman-compressor",
+  "name": "octor-compressor",
   "version": "1.0.0",
-  "description": "Octoman Compressor - 免费开源的图片压缩神器，PP鸭 复刻版。支持 PNG/JPEG/WebP/AVIF/JPEG XL 格式，集成 Squoosh/Sharp/pngquant/mozjpeg/gifsicle/oxipng 多引擎",
+  "description": "Octor Compressor - 免费开源的图片压缩神器支持 PNG/JPEG/WebP/AVIF/JPEG XL 格式，集成 Squoosh/Sharp/pngquant/mozjpeg/gifsicle/oxipng 多引擎",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -13,8 +13,8 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {
-    "appId": "com.octoman.compressor",
-    "productName": "Octoman Compressor",
+    "appId": "com.octor.compressor",
+    "productName": "Octor Compressor",
     "directories": {
       "output": "release"
     },
@@ -55,12 +55,11 @@
     "avif",
     "jxl",
     "jpegxl",
-    "ppduck",
     "squoosh",
     "sharp",
     "oxipng"
   ],
-  "author": "Octoman Team",
+  "author": "Octor Team",
   "license": "MIT",
   "devDependencies": {
     "electron": "^28.0.0",
@@ -70,5 +69,6 @@
   "dependencies": {
     "@squoosh/lib": "^0.3.1",
     "sharp": "^0.35.2"
-  }
+  },
+  "productName": "Octor Compressor"
 }

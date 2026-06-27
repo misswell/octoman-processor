@@ -1,13 +1,13 @@
-# 🐙 Octoman Compressor
+# 🐙 Octor Compressor
 
 > **免费开源的图片压缩神器** — 图片压缩神器，帮你的图片减减肥
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)](https://github.com/guofeng/octoman-compressor/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)](https://github.com/guofeng/octor-compressor/releases)
 
 ## 📸 截图
 
-![Octoman Compressor](website/screenshot.png)
+![Octor Compressor](website/screenshot.png)
 
 ## ✨ 特性
 
@@ -74,14 +74,14 @@
 
 ### 下载客户端
 
-从 [Releases](https://github.com/guofeng/octoman-compressor/releases) 页面下载对应系统的安装包。
+从 [Releases](https://github.com/guofeng/octor-compressor/releases) 页面下载对应系统的安装包。
 
 ### 从源码运行
 
 ```bash
 # 克隆仓库
-git clone https://github.com/guofeng/octoman-compressor.git
-cd octoman-compressor
+git clone https://github.com/guofeng/octor-compressor.git
+cd octor-compressor
 
 # 安装依赖
 npm install
@@ -102,7 +102,7 @@ npm run website
 ## 🏗️ 项目结构
 
 ```
-octoman-compressor/
+octor-compressor/
 ├── main.js              # Electron 主进程
 ├── compression/
 │   └── engine.js        # 压缩引擎（多后端调度）
@@ -117,7 +117,7 @@ octoman-compressor/
 
 ## 📄 许可证
 
-[MIT](LICENSE) © Octoman Team
+[MIT](LICENSE) © Octor Team
 
 ## 🙏 致谢
 

@@ -135,7 +135,7 @@ function makeResult(filePath, originalSize, compressedSize, buffer, type, algori
 
 // ─── CLI-based compressors (legacy) ─────────────────────────────
 async function compressPNG(filePath, options = {}) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octoman-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octor-'));
   const tmpFile = path.join(tmpDir, 'compressed.png');
   const originalSize = getFileSize(filePath);
   const analysis = analyzeImage(filePath, 'png');
@@ -159,7 +159,7 @@ async function compressPNG(filePath, options = {}) {
 }
 
 async function compressJPG(filePath, options = {}) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octoman-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octor-'));
   const tmpFile = path.join(tmpDir, 'compressed.jpg');
   const originalSize = getFileSize(filePath);
   const analysis = analyzeImage(filePath, 'jpg');
@@ -198,7 +198,7 @@ async function compressJPG(filePath, options = {}) {
 }
 
 async function compressGIF(filePath, options = {}) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octoman-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octor-'));
   const tmpFile = path.join(tmpDir, 'compressed.gif');
   const originalSize = getFileSize(filePath);
   const analysis = analyzeImage(filePath, 'gif');
@@ -240,7 +240,7 @@ async function compressToWebP(filePath, options = {}) {
   }
 
   // Fallback to CLI cwebp
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octoman-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octor-'));
   const tmpFile = path.join(tmpDir, 'compressed.webp');
   try {
     const cmd = `"${CWEBP}" -q ${quality} -m 6 -pass 10 -mt -o "${tmpFile}" "${filePath}" 2>/dev/null`;
@@ -421,7 +421,7 @@ async function compressToAVIF(filePath, options = {}) {
   }
 
   // Try CLI avifenc
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octoman-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octor-'));
   const tmpFile = path.join(tmpDir, 'compressed.avif');
   try {
     const cmd = `"${AVIFENC}" --speed 6 --jobs 4 --min 0 --max ${quality} -o "${tmpFile}" "${filePath}" 2>/dev/null`;
@@ -456,7 +456,7 @@ async function compressToJXL(filePath, options = {}) {
   const candidates = [];
 
   // Try CLI cjxl first (best JXL encoder)
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octoman-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octor-'));
   const tmpFile = path.join(tmpDir, 'compressed.jxl');
   try {
     const distance = Math.max(0.1, Math.min(15, (100 - quality) / 7));
@@ -493,7 +493,7 @@ async function compressToJXL(filePath, options = {}) {
 // ─── OxiPNG (Rust-based PNG optimizer) ──────────────────────────
 async function compressWithOxiPNG(filePath, options = {}) {
   const originalSize = getFileSize(filePath);
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octoman-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'octor-'));
   const tmpFile = path.join(tmpDir, 'compressed.png');
 
   try {

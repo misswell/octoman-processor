@@ -7,7 +7,7 @@
   <circle cx="64" cy="60" r="6" fill="#ff5f57"/>
   <circle cx="84" cy="60" r="6" fill="#ffbd2e"/>
   <circle cx="104" cy="60" r="6" fill="#28c840"/>
-  <text x="400" y="65" text-anchor="middle" fill="#888" font-size="13" font-family="sans-serif">Octoman Compressor</text>
+  <text x="400" y="65" text-anchor="middle" fill="#888" font-size="13" font-family="sans-serif">Octor Compressor</text>
   <!-- Drop zone -->
   <rect x="80" y="100" width="640" height="200" rx="12" fill="none" stroke="#4A90D9" stroke-width="2.5" stroke-dasharray="8,6"/>
   <text x="400" y="180" text-anchor="middle" fill="#4A90D9" font-size="40">+</text>
